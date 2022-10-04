@@ -92,21 +92,21 @@ void sr_handlepacket(struct sr_instance* sr,
     sr_arp_hdr_t *arp_header = (sr_arp_hdr_t *) (ethernet_header + sizeof(sr_ethernet_hdr_t));
     unsigned short request_type = ntohs(arp_header->ar_op);
     unsigned char sender_mac[ETHER_ADDR_LEN];
-    memcpy(sender_mac, arp_header->ar_sha);
+    memcpy(sender_mac, arp_header->ar_sha, ETHER_ADDR_LEN);
     uint32_t sender_ip = ntohl(arp_header->ar_sip);
     printf("request: %x\n", request_type);
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
       /* construct ARP reply */
-      
+
     } else if (request_type == (unsigned short) arp_op_reply) {
       printf("reply to me\n");
       /* cache it */
-      struct ar_arpreq *waiting_arpreq = sr_arpcache_insert(&sr->cache, sender_mac, sender_ip);
+      struct sr_arpreq *waiting_arpreq = sr_arpcache_insert(&sr->cache, sender_mac, sender_ip);
       if (waiting_arpreq != NULL) {
         /* there is waiting arp request, send them all */
         /* send packets in "packets" */
-        struct sr_packet waiting_packet = waiting_arpreq->packets;
+        struct sr_packet *waiting_packet = waiting_arpreq->packets;
         while (waiting_packet != NULL) {
           /* update target MAC address, then send the ethernet frame */
           sr_ethernet_hdr_t *packet_ethernet_header = (sr_ethernet_hdr_t *) waiting_packet->buf;
@@ -115,7 +115,7 @@ void sr_handlepacket(struct sr_instance* sr,
 
           waiting_packet = waiting_packet->next;
         }
-        sr_arpcache_destroy(waiting_arpreq);
+        sr_arpreq_destroy(&sr->cache, waiting_arpreq);
       }
     }
 
