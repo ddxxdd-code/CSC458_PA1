@@ -17,35 +17,41 @@
   See the comments in the header file for an idea of what it should look like.
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    // Loop through the ARP request queue
+    /* Loop through the ARP request queue */
     if (sr == NULL) {
-        // sr is empty, can't do anything
+        /* sr is empty, can't do anything */
         return;
     }
-    // ARP requests is a linked list in ARP cache.
+    /* ARP requests is a linked list in ARP cache. */
     struct sr_arpreq *curr = sr->cache.requests;
+    struct sr_arpreq *prev = NULL;
+    int destroy_current_qrpreq = 0;
     while (curr != NULL) {
-        // Loop each arp request entry
+        /* Loop each arp request entry */
         if (time(NULL) - curr->sent > 1.0) {
             if (curr->times_sent >= 5) {
-                // Send icmp host unreachable to source addr 
-                // who has sent packet to wait on this arp request.
+                /* Send icmp host unreachable to source addr 
+                 * who has sent packet to wait on this arp request. */
                 struct sr_packet *curr_packet = curr->packets;
                 while (curr_packet != NULL) {
-                    // TODO: Construct icmp reply and send
+                    /* TODO: Construct icmp reply and send */
                     
                     curr_packet = curr_packet->next;
                 }
-                // Destroy the arpreq entry
-                sr_arpreq_destroy(&sr->cache, curr_packet);
+                /* Destroy the arpreq entry */
+                destroy_current_qrpreq = 1;
             } else {
-                // TODO: Send ARP request
+                /* TODO: Send ARP request */
 
                 curr->sent = time(NULL);
                 curr->times_sent++;
             }
         }
+        prev = curr;
         curr = curr->next;
+        if (destroy_current_qrpreq) {
+            sr_arpreq_destroy(&sr->cache, prev);
+        }
     }
 }
 
