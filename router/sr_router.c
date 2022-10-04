@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 
 
 #include "sr_if.h"
@@ -9,6 +10,13 @@
 #include "sr_protocol.h"
 #include "sr_arpcache.h"
 #include "sr_utils.h"
+
+/* functio prototypes */
+void make_icmp_header(sr_icmp_hdr_t *header, uint8_t type, uint8_t code);
+void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, uint8_t *data, int len);
+void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t protocol, uint32_t src, uint32_t dst);
+void make_arp_header(sr_arp_hdr_t *header, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip);
+void make_ethernet_header(sr_ethernet_hdr_t *header, uint8_t *dhost, uint8_t *shost, uint16_t type);
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -72,13 +80,10 @@ void sr_handlepacket(struct sr_instance* sr,
   uint8_t ethernet_source[ETHER_ADDR_LEN];
   memcpy(ethernet_destination, ethernet_header->ether_dhost, ETHER_ADDR_LEN);
   memcpy(ethernet_source, ethernet_header->ether_shost, ETHER_ADDR_LEN);
-  printf("recorded ethernet addresses\n");
-  int i;
-  printf("ethernet src:");
-  for (i = 0; i < ETHER_ADDR_LEN; i++) {
-    printf("%x ", ethernet_source[i]);
-  }
-  printf("\n");
+  printf("recorded ethernet addresses source\n");
+  print_addr_eth(ethernet_source);
+  printf("ethernet destination\n");
+  print_addr_eth(ethernet_destination);
   uint16_t ethernet_type = ntohs(ethernet_header->ether_type);
   printf("ethernet type: %x\n", ethernet_type);
   /* brach on type of packet */
@@ -86,6 +91,7 @@ void sr_handlepacket(struct sr_instance* sr,
     printf("ip packet\n");
     /* try to parse ip packet */
     sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (ethernet_header + sizeof(sr_ethernet_hdr_t));
+    /* TODO: handle ip packet */
   } else if (ethernet_type == (uint16_t) ethertype_arp) {
     printf("arp packet\n");
     /* try to parse arp packet */
@@ -93,12 +99,33 @@ void sr_handlepacket(struct sr_instance* sr,
     unsigned short request_type = ntohs(arp_header->ar_op);
     unsigned char sender_mac[ETHER_ADDR_LEN];
     memcpy(sender_mac, arp_header->ar_sha, ETHER_ADDR_LEN);
+    unsigned char target_mac[ETHER_ADDR_LEN];
+    memcpy(target_mac, arp_header->ar_tha, ETHER_ADDR_LEN);
     uint32_t sender_ip = ntohl(arp_header->ar_sip);
+    uint32_t target_ip = ntohl(arp_header->ar_tip);
+    printf("sender ip: %x\n", sender_ip);
+    printf("target ip: %x\n", target_ip);
     printf("request: %x\n", request_type);
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
       /* construct ARP reply */
-
+      /* get interface */
+      struct sr_if *incoming_interface = sr_get_interface(sr, interface);
+      unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+      uint8_t *packet = malloc(length);
+      if (packet == NULL) {
+        printf("malloc in sr_router arp reply failed\n");
+        exit(1);
+      }
+      sr_arp_hdr_t *arp_reply_header = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+      // printf("interface ip: %x\n", incoming_interface->ip);
+      make_arp_header(arp_reply_header, arp_op_reply, incoming_interface->addr, incoming_interface->ip, sender_mac, sender_ip);
+      make_ethernet_header((sr_ethernet_hdr_t *) packet, ethernet_source, incoming_interface->addr, ethertype_arp);
+      // print_addr_eth(((sr_ethernet_hdr_t *) packet)->ether_dhost);
+      // print_addr_eth(((sr_ethernet_hdr_t *) packet)->ether_shost);
+      sr_send_packet(sr, packet, length, interface);
+      free(packet);
+      */
     } else if (request_type == (unsigned short) arp_op_reply) {
       printf("reply to me\n");
       /* cache it */
@@ -159,17 +186,17 @@ void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t
   header->ip_sum = htons(cksum(header, sizeof(sr_ip_hdr_t) - 2 * sizeof(uint32_t)));
 }
 /* generate arp */
-void make_arp_header(sr_arp_hdr_t *header, unsigned short hrd, unsigned short pro, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip) {
+void make_arp_header(sr_arp_hdr_t *header, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip) {
   assert(header);
-  header->ar_hrd = htons(hrd);
-  header->ar_pro = htons(pro);
+  header->ar_hrd = htons(arp_hrd_ethernet);
+  header->ar_pro = htons(ethertype_ip);
   header->ar_hln = ETHER_ADDR_LEN;
   header->ar_pln = sizeof(uint32_t);
-  header->ar_op = op;
+  header->ar_op = htons(op);
   memcpy(header->ar_sha, sha, ETHER_ADDR_LEN);
-  header->ar_sip = sip;
+  header->ar_sip = htonl(sip);
   memcpy(header->ar_tha, tha, ETHER_ADDR_LEN);
-  header->ar_tip = tip;
+  header->ar_tip = htonl(tip);
 }
 /* generate ethernet header */
 void make_ethernet_header(sr_ethernet_hdr_t *header, uint8_t *dhost, uint8_t *shost, uint16_t type) {
