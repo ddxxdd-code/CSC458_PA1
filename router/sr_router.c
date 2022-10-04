@@ -98,13 +98,24 @@ void sr_handlepacket(struct sr_instance* sr,
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
       /* construct ARP reply */
-
+      
     } else if (request_type == (unsigned short) arp_op_reply) {
       printf("reply to me\n");
       /* cache it */
       struct ar_arpreq *waiting_arpreq = sr_arpcache_insert(&sr->cache, sender_mac, sender_ip);
       if (waiting_arpreq != NULL) {
         /* there is waiting arp request, send them all */
+        /* send packets in "packets" */
+        struct sr_packet waiting_packet = waiting_arpreq->packets;
+        while (waiting_packet != NULL) {
+          /* update target MAC address, then send the ethernet frame */
+          sr_ethernet_hdr_t *packet_ethernet_header = (sr_ethernet_hdr_t *) waiting_packet->buf;
+          memcpy(packet_ethernet_header->ether_dhost, &sender_mac, ETHER_ADDR_LEN);
+          sr_send_packet(sr, (uint8_t *) waiting_packet->buf, waiting_packet->len, waiting_packet->iface);
+
+          waiting_packet = waiting_packet->next;
+        }
+        sr_arpcache_destroy(waiting_arpreq);
       }
     }
 
