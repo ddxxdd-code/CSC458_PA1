@@ -44,6 +44,30 @@ struct sr_if* sr_get_interface(struct sr_instance* sr, const char* name)
 } /* -- sr_get_interface -- */
 
 /*--------------------------------------------------------------------- 
+ * Method: sr_get_interface_by_ip
+ * Scope: Global
+ * Argument: pointer to instance of router, target ip in host bytes order
+ *
+ * Given an interface ip return the interface record or 0 if it doesn't
+ * exist.
+ *
+ *---------------------------------------------------------------------*/
+struct sr_if* sr_get_interface_by_ip(struct sr_instance* sr, uint32_t ip) {
+    /* -- REQUIRES -- */
+    assert(sr);
+
+    uint32_t target_ip = htonl(ip);
+    struct sr_if* if_walker = sr->if_list;
+    while (if_walker) {
+        if (if_walker->ip == target_ip) {
+            return if_walker;
+        }
+        if_walker = if_walker->next;
+    }
+    return NULL;
+} /* -- sr_get_interface_by_ip -- */
+
+/*--------------------------------------------------------------------- 
  * Method: sr_add_interface(..)
  * Scope: Global
  *
