@@ -106,6 +106,8 @@ void sr_handlepacket(struct sr_instance* sr,
     } else {
       /* This is not for me */
       printf("ip packet not for me\n");
+      /* find best match interface */
+      struct sr_rt *target_routing_table = perform_lpm_ip(sr, target_ip);
     }
   } else if (ethernet_type == (uint16_t) ethertype_arp) {
     printf("arp packet\n");
