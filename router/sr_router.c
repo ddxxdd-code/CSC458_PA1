@@ -12,8 +12,8 @@
 #include "sr_utils.h"
 
 /* functio prototypes */
-void make_icmp_header(sr_icmp_hdr_t *header, uint8_t type, uint8_t code);
-void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, uint8_t *data);
+void make_icmp_header(sr_icmp_hdr_t *header, uint8_t type, uint8_t code, unsigned int len);
+void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, uint8_t *data, unsigned int len);
 void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t protocol, uint32_t src, uint32_t dst);
 void make_arp_header(sr_arp_hdr_t *header, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip);
 void make_ethernet_header(sr_ethernet_hdr_t *header, uint8_t *dhost, uint8_t *shost, uint16_t type);
@@ -73,8 +73,8 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(interface);
 
   printf("*** -> Received packet of length %d \n",len);
+  print_hdrs(packet, len);
   /* sr_print_routing_table(sr); */
-  print_hdr_eth(packet);
   /* Try to handle a packet
    parse the ethernet header*/
   sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) packet;
@@ -92,8 +92,8 @@ void sr_handlepacket(struct sr_instance* sr,
   if (ethernet_type == (uint16_t) ethertype_ip) {
     printf("ip packet\n");
     /* try to parse ip packet */
-    sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (ethernet_header + sizeof(sr_ethernet_hdr_t));
-    print_hdr_ip(ip_header);
+    sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+    print_hdr_ip((uint8_t *) ip_header);
     /* TODO: handle ip packet */
     uint32_t source_ip = ntohl(ip_header->ip_src);
     uint32_t target_ip = ntohl(ip_header->ip_dst);
@@ -103,17 +103,61 @@ void sr_handlepacket(struct sr_instance* sr,
     if (target_interface != NULL) {
       /* This is for me */
       printf("ip packet for me\n");
+      /* Check if it's ICMP */
+      if (ip_header->ip_p == (uint8_t) ip_protocol_icmp) {
+        printf("icmp for me\n");
+        /* ICMP echo request */
+        printf("icmp echo request\n");
+        sr_icmp_hdr_t *icmp_header = (sr_icmp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+        print_hdr_icmp((uint8_t *) icmp_header);
+        printf("icmp type: %d\n", icmp_header->icmp_type);
+        if (icmp_header->icmp_type == (uint8_t) 8) {
+          printf("ICMP echo message\n");
+          /* Here, we just modify the field and send back */
+          uint8_t *icmp_echo_reply = packet;
+          make_icmp_header((sr_icmp_hdr_t *) (icmp_echo_reply + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 0, 0, len - (sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)));
+          print_hdr_icmp(icmp_echo_reply + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+          sr_ip_hdr_t *icmp_reply_ip_header = (sr_ip_hdr_t *) (icmp_echo_reply + sizeof(sr_ethernet_hdr_t));
+          icmp_reply_ip_header->ip_src = htonl(target_ip);
+          icmp_reply_ip_header->ip_dst = htonl(source_ip);
+          icmp_reply_ip_header->ip_sum = 0;
+          icmp_reply_ip_header->ip_sum = cksum(icmp_reply_ip_header, sizeof(sr_ip_hdr_t));
+          /* make_ip_header(, sizeof(sr_icmp_hdr_t) + len - length, INIT_TTL, ip_protocol_icmp, , source_ip); */
+          print_hdr_ip(icmp_echo_reply + sizeof(sr_ethernet_hdr_t));
+          make_ethernet_header((sr_ethernet_hdr_t *) icmp_echo_reply, ethernet_source, ethernet_destination, ethertype_ip);
+          print_hdrs(icmp_echo_reply, len);
+          sr_send_packet(sr, icmp_echo_reply, len, interface);
+          /* free(icmp_echo_reply); */
+        }
+      } else {
+        /* For other types, return ICMP port unreachable*/
+      }
     } else {
       /* This is not for me */
       printf("ip packet not for me\n");
       /* find best match interface */
       struct sr_rt *target_routing_table = perform_lpm_ip(sr, target_ip);
+      if (target_routing_table) {
+        /* next hop found */
+        struct sr_if *target_out_interface = sr_get_interface(sr, target_routing_table->interface);
+        print_addr_ip_int(target_out_interface->ip);
+        struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, target_out_interface->ip);
+        if (target_arpentry) {
+          /* send frame to next hop */
+          /* need to re-construct ip header, ethernet header */
+          free(target_arpentry);
+        } else {
+          /* Send ARP request */
+        }
+      } else {
+        /* no next found, icmp host not found reply */
+      }
     }
   } else if (ethernet_type == (uint16_t) ethertype_arp) {
     printf("arp packet\n");
     /* try to parse arp packet */
-    sr_arp_hdr_t *arp_header = (sr_arp_hdr_t *) (ethernet_header + sizeof(sr_ethernet_hdr_t));
-    print_hdr_arp(arp_header);
+    sr_arp_hdr_t *arp_header = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+    print_hdr_arp((uint8_t *) arp_header);
     unsigned short request_type = ntohs(arp_header->ar_op);
     unsigned char sender_mac[ETHER_ADDR_LEN];
     memcpy(sender_mac, arp_header->ar_sha, ETHER_ADDR_LEN);
@@ -142,7 +186,7 @@ void sr_handlepacket(struct sr_instance* sr,
       /* printf("interface ip: %x\n", incoming_interface->ip); */
       make_arp_header(arp_reply_header, arp_op_reply, incoming_interface->addr, ntohl(incoming_interface->ip), sender_mac, sender_ip);
       make_ethernet_header((sr_ethernet_hdr_t *) packet, ethernet_source, incoming_interface->addr, ethertype_arp);
-      print_hdr_arp((sr_ethernet_hdr_t *) arp_reply_header);
+      print_hdr_arp((uint8_t *) arp_reply_header);
       sr_send_packet(sr, packet, length, interface);
       print_hdr_eth(packet);
       free(packet);
@@ -151,7 +195,7 @@ void sr_handlepacket(struct sr_instance* sr,
       /* cache it */
       struct sr_arpreq *waiting_arpreq = sr_arpcache_insert(&sr->cache, sender_mac, sender_ip);
       if (waiting_arpreq != NULL) {
-        /* there is waiting arp request, send them all */
+        /* there is waiting packets on this arp request, send them all */
         /* send packets in "packets" */
         struct sr_packet *waiting_packet = waiting_arpreq->packets;
         while (waiting_packet != NULL) {
@@ -180,30 +224,33 @@ void sr_handlepacket(struct sr_instance* sr,
  * Call the following functions to fill the parts of the buffer
  * Use sr_send_packet to send to the desired outpust.
  * generate icmp message */
-void make_icmp_header(sr_icmp_hdr_t *header, uint8_t type, uint8_t code) {
+void make_icmp_header(sr_icmp_hdr_t *header, uint8_t type, uint8_t code, unsigned int len) {
   assert(header);
   header->icmp_type = type;
   header->icmp_code = code;
-  header->icmp_sum = htons(cksum(header, 2));
+  header->icmp_sum = 0;
+  header->icmp_sum = cksum(header, len);
 }
 /* construct icmp type3 message */
-void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, uint8_t *data) {
+void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, uint8_t *data, unsigned int len) {
   assert(header);
   header->icmp_type = type;
   header->icmp_code = code;
-  header->icmp_sum = htons(cksum(header, 2));
+  header->icmp_sum = 0;
   memcpy(header->data, data, ICMP_DATA_SIZE);
+  header->icmp_sum = cksum(header, len);
 }
 /* generate ip header */
 void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t protocol, uint32_t src, uint32_t dst) {
   assert(header);
+  header->ip_tos = 0;
   header->ip_len = htons(sizeof(sr_ip_hdr_t) + data_len);
   header->ip_ttl = ttl;
   header->ip_p = protocol;
-  header->ip_src = src;
-  header->ip_dst = dst;
+  header->ip_src = htonl(src);
+  header->ip_dst = htonl(dst);
   header->ip_sum = 0x0000;
-  header->ip_sum = htons(cksum(header, sizeof(sr_ip_hdr_t) - 2 * sizeof(uint32_t)));
+  header->ip_sum = cksum(header, sizeof(sr_ip_hdr_t));
 }
 /* generate arp */
 void make_arp_header(sr_arp_hdr_t *header, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip) {
@@ -225,3 +272,6 @@ void make_ethernet_header(sr_ethernet_hdr_t *header, uint8_t *dhost, uint8_t *sh
   memcpy(header->ether_shost, shost, ETHER_ADDR_LEN);
   header->ether_type = htons(type);
 }
+/* send icmp echo reply */
+/* send icmp message */
+/* send ARP message */
