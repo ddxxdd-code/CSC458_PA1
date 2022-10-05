@@ -24,33 +24,56 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     }
     /* ARP requests is a linked list in ARP cache. */
     struct sr_arpreq *curr = sr->cache.requests;
-    struct sr_arpreq *prev = NULL;
-    int destroy_current_qrpreq = 0;
+    struct sr_arpreq *temp = NULL;
     while (curr != NULL) {
-        /* Loop each arp request entry */
-        if (time(NULL) - curr->sent > 1.0) {
-            if (curr->times_sent >= 5) {
-                /* Send icmp host unreachable to source addr 
-                 * who has sent packet to wait on this arp request. */
-                struct sr_packet *curr_packet = curr->packets;
-                while (curr_packet != NULL) {
-                    /* TODO: Construct icmp reply and send */
-                    
-                    curr_packet = curr_packet->next;
-                }
-                /* Destroy the arpreq entry */
-                destroy_current_qrpreq = 1;
-            } else {
-                /* TODO: Send ARP request */
-
-                curr->sent = time(NULL);
-                curr->times_sent++;
-            }
-        }
-        prev = curr;
+        temp = curr;
         curr = curr->next;
-        if (destroy_current_qrpreq) {
-            sr_arpreq_destroy(&sr->cache, prev);
+        handle_arpreq(sr, temp);
+    }
+}
+
+/*
+    Handle ARP requests
+*/
+void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
+    /* Loop each arp request entry */
+    if (time(NULL) - request->sent > 1.0) {
+        if (request->times_sent >= 5) {
+            /* Send icmp host unreachable to source addr 
+                * who has sent packet to wait on this arp request. */
+            struct sr_packet *curr_packet = request->packets;
+            while (curr_packet != NULL) {
+                /* Construct icmp unreachable reply and send */
+                unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+                uint8_t *buffer = malloc(length);
+                sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *) (buffer + length - sizeof(sr_icmp_t3_hdr_t));
+                /* make_icmp_t3_header(icmp_header, 3, 1, )*/
+                sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (icmp_header - sizeof(sr_ip_hdr_t));
+                /* make_ip_header(ip_header, ); */
+                sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) buffer;
+                /* make_ethernet_header(ethernet_header, ); */
+                /* TODO: find interface */
+                sr_send_packet(sr, buffer, length, interface);
+                free(buffer);
+
+                curr_packet = curr_packet->next;
+            }
+            /* Destroy the arpreq entry */
+            sr_arpreq_destroy(&sr->cache, request);
+        } else {
+            /* TODO: Send ARP request */
+            unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+            uint8_t *buffer = malloc(length);
+            sr_arp_hdr_t *arp_header = (sr_arp_hdr_t *) (buffer + sizeof(sr_ethernet_hdr_t));
+            /* make_arp_header(arp_header, 3, 1, )*/
+            sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) buffer;
+            /* make_ethernet_header(ethernet_header, ); */
+            /* TODO: find interface */
+            sr_send_packet(sr, buffer, length, interface);
+            free(buffer);
+            
+            request->sent = time(NULL);
+            request->times_sent++;
         }
     }
 }

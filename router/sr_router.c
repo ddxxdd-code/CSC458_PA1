@@ -85,7 +85,7 @@ void sr_handlepacket(struct sr_instance* sr,
   printf("ethernet destination\n");
   print_addr_eth(ethernet_destination);
   uint16_t ethernet_type = ntohs(ethernet_header->ether_type);
-  printf("ethernet type: %x\n", ethernet_type);
+  /*printf("ethernet type: %x\n", ethernet_type);*/
   /* brach on type of packet */
   if (ethernet_type == (uint16_t) ethertype_ip) {
     printf("ip packet\n");
@@ -96,7 +96,7 @@ void sr_handlepacket(struct sr_instance* sr,
     printf("arp packet\n");
     /* try to parse arp packet */
     sr_arp_hdr_t *arp_header = (sr_arp_hdr_t *) (ethernet_header + sizeof(sr_ethernet_hdr_t));
-    print_hdr_arp(arp_header);
+    /*print_hdr_arp(arp_header);*/
     unsigned short request_type = ntohs(arp_header->ar_op);
     unsigned char sender_mac[ETHER_ADDR_LEN];
     memcpy(sender_mac, arp_header->ar_sha, ETHER_ADDR_LEN);
@@ -104,11 +104,11 @@ void sr_handlepacket(struct sr_instance* sr,
     memcpy(target_mac, arp_header->ar_tha, ETHER_ADDR_LEN);
     uint32_t sender_ip = ntohl(arp_header->ar_sip);
     uint32_t target_ip = ntohl(arp_header->ar_tip);
-    printf("sender ip: ");
+    /*printf("sender ip: ");
     print_addr_ip_int(arp_header->ar_sip);
     printf("target ip: ");
     print_addr_ip_int(arp_header->ar_tip);
-    printf("request: %x\n", request_type);
+    printf("request: %x\n", request_type);*/
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
       /* construct ARP reply */
@@ -125,9 +125,7 @@ void sr_handlepacket(struct sr_instance* sr,
       /* printf("interface ip: %x\n", incoming_interface->ip); */
       make_arp_header(arp_reply_header, arp_op_reply, incoming_interface->addr, ntohl(incoming_interface->ip), sender_mac, sender_ip);
       make_ethernet_header((sr_ethernet_hdr_t *) packet, ethernet_source, incoming_interface->addr, ethertype_arp);
-      print_hdr_arp((sr_ethernet_hdr_t *) arp_reply_header);
-      /* print_addr_eth(((sr_ethernet_hdr_t *) packet)->ether_dhost); */
-      /* print_addr_eth(((sr_ethernet_hdr_t *) packet)->ether_shost); */
+      /* print_hdr_arp((sr_ethernet_hdr_t *) arp_reply_header); */
       sr_send_packet(sr, packet, length, interface);
       free(packet);
     } else if (request_type == (unsigned short) arp_op_reply) {
