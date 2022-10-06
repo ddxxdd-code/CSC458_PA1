@@ -122,15 +122,22 @@ void sr_handlepacket(struct sr_instance* sr,
           icmp_reply_ip_header->ip_dst = htonl(source_ip);
           icmp_reply_ip_header->ip_sum = 0;
           icmp_reply_ip_header->ip_sum = cksum(icmp_reply_ip_header, sizeof(sr_ip_hdr_t));
-          /* make_ip_header(, sizeof(sr_icmp_hdr_t) + len - length, INIT_TTL, ip_protocol_icmp, , source_ip); */
           print_hdr_ip(icmp_echo_reply + sizeof(sr_ethernet_hdr_t));
           make_ethernet_header((sr_ethernet_hdr_t *) icmp_echo_reply, ethernet_source, ethernet_destination, ethertype_ip);
           print_hdrs(icmp_echo_reply, len);
           sr_send_packet(sr, icmp_echo_reply, len, interface);
-          /* free(icmp_echo_reply); */
         }
       } else {
         /* For other types, return ICMP port unreachable*/
+        printf("other typr IP packet for me\n");
+        unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+        uint8_t *port_unreachable_packet = malloc(length);
+        make_icmp_t3_header((sr_icmp_t3_hdr_t *) (port_unreachable_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 3, 3, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
+        make_ip_header((sr_ip_hdr_t *) (port_unreachable_packet + sizeof(sr_ethernet_hdr_t)), sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, target_ip, source_ip);
+        make_ethernet_header((sr_ethernet_hdr_t *) port_unreachable_packet, ethernet_source, ethernet_destination, ethertype_ip);
+        sr_send_packet(sr, port_unreachable_packet, length, interface);
+        print_hdrs(port_unreachable_packet, length);
+        free(port_unreachable_packet);
       }
     } else {
       /* This is not for me */
@@ -209,9 +216,7 @@ void sr_handlepacket(struct sr_instance* sr,
         sr_arpreq_destroy(&sr->cache, waiting_arpreq);
       }
     }
-
   }
-  
 }/* end sr_ForwardPacket */
 
 /* Helper functions
@@ -243,6 +248,8 @@ void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, u
 /* generate ip header */
 void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t protocol, uint32_t src, uint32_t dst) {
   assert(header);
+  header->ip_v = 4;
+  header->ip_hl = 5;
   header->ip_tos = 0;
   header->ip_len = htons(sizeof(sr_ip_hdr_t) + data_len);
   header->ip_ttl = ttl;

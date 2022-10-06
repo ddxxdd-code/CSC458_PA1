@@ -50,7 +50,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
                 unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
                 uint8_t *buffer = malloc(length);
                 sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *) (buffer + length - sizeof(sr_icmp_t3_hdr_t));
-                make_icmp_t3_header(icmp_header, 3, 1, curr_packet->buf);
+                make_icmp_t3_header(icmp_header, 3, 1, curr_packet->buf, sizeof(sr_icmp_t3_hdr_t));
                 sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (icmp_header - sizeof(sr_ip_hdr_t));
                 uint32_t target_ip = ntohl(((sr_ip_hdr_t *) (curr_packet->buf + sizeof(sr_ethernet_hdr_t)))->ip_dst);
                 /* target ip is where I, the router receives the packet */
