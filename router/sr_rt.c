@@ -165,5 +165,50 @@ void sr_print_routing_entry(struct sr_rt* entry)
     printf("%s\t",inet_ntoa(entry->gw));
     printf("%s\t",inet_ntoa(entry->mask));
     printf("%s\n",entry->interface);
+    /* print_addr_ip_int(ntohl(entry->gw.s_addr)); */
 
 } /* -- sr_print_routing_entry -- */
+
+/*---------------------------------------------------------------------
+ * Method: find maximum match prefix
+ *
+ * 
+ *---------------------------------------------------------------------*/
+int matched_bits(uint32_t first_ip, uint32_t second_ip, uint32_t mask) {
+    uint32_t tester = 1 << 31;
+    int count = 0;
+    uint32_t masked_first_ip = first_ip & mask;
+    uint32_t masked_second_ip = second_ip & mask;
+    uint32_t matched_bits = masked_first_ip ^ masked_second_ip;
+    int i;
+    for (i = 0; i < 32; i++) {
+        if (tester & matched_bits) {
+            break;
+        }
+        count++;
+        tester >>= 1;
+    }
+    return count;
+} /* -- matched_bits -- */
+/*---------------------------------------------------------------------
+ * Method: perform_lpm_ip
+ *
+ * Perform lpm matching to find the best match routing table entry
+ * which gives the next hop ip and interface name, 
+ * which can then be used to construct headers
+ *---------------------------------------------------------------------*/
+struct sr_rt *perform_lpm_ip(struct sr_instance *sr, uint32_t target_ip) {
+    struct sr_rt *curr = sr->routing_table;
+    struct sr_rt *best_match = NULL;
+    int max_fit = 0;
+    int current_fit = 0;
+    while (curr) {
+        current_fit = matched_bits(ntohl(curr->dest.s_addr), target_ip, ntohl(curr->mask.s_addr));
+        if (current_fit > max_fit) {
+            max_fit = current_fit;
+            best_match = curr;
+        }
+        curr = curr->next;
+    }
+    return best_match;
+ } /* -- perform_lpm_ip -- */

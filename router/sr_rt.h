@@ -31,6 +31,7 @@ void sr_add_rt_entry(struct sr_instance*, struct in_addr,struct in_addr,
                   struct in_addr, char*);
 void sr_print_routing_table(struct sr_instance* sr);
 void sr_print_routing_entry(struct sr_rt* entry);
-
+struct sr_rt *perform_lpm_ip(struct sr_instance *sr, uint32_t target_ip);
+/* int matched_bits(uint32_t first_ip, uint32_t second_ip, uint32_t mask); */
 
 #endif  /* --  sr_RT_H -- */
