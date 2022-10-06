@@ -94,7 +94,6 @@ void sr_handlepacket(struct sr_instance* sr,
     /* try to parse ip packet */
     sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
     print_hdr_ip((uint8_t *) ip_header);
-    /* TODO: handle ip packet */
     uint32_t source_ip = ntohl(ip_header->ip_src);
     uint32_t target_ip = ntohl(ip_header->ip_dst);
     /* check if it's for me */
@@ -141,6 +140,7 @@ void sr_handlepacket(struct sr_instance* sr,
       }
     } else {
       /* This is not for me */
+      /* TODO: finish this case for forwarding */
       printf("ip packet not for me\n");
       /* find best match interface */
       struct sr_rt *target_routing_table = perform_lpm_ip(sr, target_ip);
@@ -154,10 +154,10 @@ void sr_handlepacket(struct sr_instance* sr,
           /* need to re-construct ip header, ethernet header */
           free(target_arpentry);
         } else {
-          /* Send ARP request */
+          /* TODO: Send ARP request */
         }
       } else {
-        /* no next found, icmp host not found reply */
+        /* TODO: no next found, icmp host not found reply */
       }
     }
   } else if (ethernet_type == (uint16_t) ethertype_arp) {
@@ -210,7 +210,6 @@ void sr_handlepacket(struct sr_instance* sr,
           sr_ethernet_hdr_t *packet_ethernet_header = (sr_ethernet_hdr_t *) waiting_packet->buf;
           memcpy(packet_ethernet_header->ether_dhost, &sender_mac, ETHER_ADDR_LEN);
           sr_send_packet(sr, (uint8_t *) waiting_packet->buf, waiting_packet->len, waiting_packet->iface);
-
           waiting_packet = waiting_packet->next;
         }
         sr_arpreq_destroy(&sr->cache, waiting_arpreq);
