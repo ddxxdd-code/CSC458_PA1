@@ -69,6 +69,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
                     make_icmp_t3_header(icmp_header, 3, 1, curr_packet->buf, sizeof(sr_icmp_t3_hdr_t));
                     sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (buffer + sizeof(sr_ethernet_hdr_t));
                     sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) buffer;
+                    /* TODO: need to handle this case */
                     /* make_ethernet_header(ethernet_header, out post mac, next hop mac); */
                     /* sr_send_packet(sr, buffer, length, curr_packet->iface); */
                     free(buffer);
