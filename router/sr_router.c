@@ -162,19 +162,46 @@ void sr_handlepacket(struct sr_instance* sr,
       } else {
         ip_header->ip_ttl -= 1;
       }
+      /* update ip header check sum */
+      ip_header->ip_sum = cksum(ip_header, sizeof(sr_ip_hdr_t));
+      /* make new packet for forwarding and possibly add to arp request queue*/
+      /*uint8_t *forward_packet = malloc(len);
+      if (forward_packet == NULL) {
+        printf("malloc error");
+        exit(1);
+      }
+      memcpy(forward_packet, packet, len);
+      ethernet_header = (sr_ethernet_hdr_t *) forward_packet;
+      ip_header = (sr_ip_hdr_t *) (forward_packet + sizeof(sr_ethernet_hdr_t));
+      ip_header->ip_sum = 0;
+      ip_header->ip_sum = cksum(ip_header, sizeof(sr_ip_hdr_t));*/
       /* find best match interface */
       struct sr_rt *target_routing_table = perform_lpm_ip(sr, target_ip);
       if (target_routing_table) {
         /* next hop found */
         struct sr_if *target_out_interface = sr_get_interface(sr, target_routing_table->interface);
-        print_addr_ip_int(target_out_interface->ip);
-        struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, target_out_interface->ip);
+        printf("next interface found\n");
+        sr_arpcache_dump(&sr->cache);
+        struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, target_routing_table->gw.s_addr);
+        print_addr_ip_int(ntohl(target_routing_table->gw.s_addr));
         if (target_arpentry) {
           /* send frame to next hop */
-          /* need to change ip header, ethernet header */
+          /* need to change ethernet header */
+          printf("target arp entry for target MAC found\n");
+          make_ethernet_header(ethernet_header, target_arpentry->mac, target_out_interface->addr, ethertype_ip);
+          print_hdrs(packet, len);
+          sr_send_packet(sr, packet, len, target_out_interface->name);
           free(target_arpentry);
         } else {
           /* TODO: Send ARP request */
+          printf("target arp entry not found\n");
+          unsigned char empty_mac[ETHER_ADDR_LEN] = {0};
+          make_ethernet_header(ethernet_header, empty_mac, target_out_interface->addr, ethertype_ip);
+          struct sr_arpreq *arp_request = sr_arpcache_queuereq(&sr->cache, target_routing_table->gw.s_addr, packet, len, target_out_interface->name);
+          printf("ip: %X\n", arp_request->ip);
+          if (arp_request != NULL) {
+            handle_arpreq(sr, arp_request);
+          }
         }
       } else {
         /* TODO: no next found, icmp host not found reply */
@@ -190,13 +217,13 @@ void sr_handlepacket(struct sr_instance* sr,
     memcpy(sender_mac, arp_header->ar_sha, ETHER_ADDR_LEN);
     unsigned char target_mac[ETHER_ADDR_LEN];
     memcpy(target_mac, arp_header->ar_tha, ETHER_ADDR_LEN);
-    uint32_t sender_ip = ntohl(arp_header->ar_sip);
-    uint32_t target_ip = ntohl(arp_header->ar_tip);
-    /*printf("sender ip: ");
-    print_addr_ip_int(arp_header->ar_sip);
+    uint32_t sender_ip = (arp_header->ar_sip);
+    uint32_t target_ip = (arp_header->ar_tip);
+    printf("sender ip: ");
+    print_addr_ip_int(ntohl(arp_header->ar_sip));
     printf("target ip: ");
-    print_addr_ip_int(arp_header->ar_tip);
-    printf("request: %x\n", request_type);*/
+    print_addr_ip_int(ntohl(arp_header->ar_tip));
+    printf("request: %x\n", request_type);
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
       /* construct ARP reply */
@@ -221,17 +248,22 @@ void sr_handlepacket(struct sr_instance* sr,
       printf("reply to me\n");
       /* cache it */
       struct sr_arpreq *waiting_arpreq = sr_arpcache_insert(&sr->cache, sender_mac, sender_ip);
+      sr_arpcache_dump(&sr->cache);
       if (waiting_arpreq != NULL) {
         /* there is waiting packets on this arp request, send them all */
+        printf("waiting arpreq found\n");
         /* send packets in "packets" */
         struct sr_packet *waiting_packet = waiting_arpreq->packets;
         while (waiting_packet != NULL) {
+          printf("waiting packet found\n");
           /* update target MAC address, then send the ethernet frame */
           sr_ethernet_hdr_t *packet_ethernet_header = (sr_ethernet_hdr_t *) waiting_packet->buf;
-          memcpy(packet_ethernet_header->ether_dhost, &sender_mac, ETHER_ADDR_LEN);
+          memcpy(packet_ethernet_header->ether_dhost, sender_mac, ETHER_ADDR_LEN);
           sr_send_packet(sr, (uint8_t *) waiting_packet->buf, waiting_packet->len, waiting_packet->iface);
+          print_hdrs(waiting_packet->buf, waiting_packet->len);
           waiting_packet = waiting_packet->next;
         }
+        printf("finished sending waiting packets, destroy arpreq\n");
         sr_arpreq_destroy(&sr->cache, waiting_arpreq);
       }
     }
