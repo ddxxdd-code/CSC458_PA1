@@ -73,6 +73,10 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(interface);
 
   printf("*** -> Received packet of length %d \n",len);
+  if (len < sizeof(sr_ethernet_hdr_t)) {
+    /* length impossible to cover ethernet header, corrupted packet */
+    return;
+  }
   print_hdrs(packet, len);
   /* sr_print_routing_table(sr); */
   /* Try to handle a packet
@@ -142,6 +146,22 @@ void sr_handlepacket(struct sr_instance* sr,
       /* This is not for me */
       /* TODO: finish this case for forwarding */
       printf("ip packet not for me\n");
+      /* sanity check the incoming packet */
+      uint16_t check_sum = ip_header->ip_sum;
+      ip_header->ip_sum = 0;
+      if (len - sizeof(sr_ethernet_hdr_t) < sizeof(sr_ip_hdr_t) 
+      && check_sum != cksum(ip_header, sizeof(sr_ip_hdr_t))) {
+        /* sanity check failed */
+        /* should not do anything here */
+        return;
+      }
+      /* decrease TTL */
+      if (ip_header->ip_ttl == 0) {
+        /* TTL = 0, discard the packet */
+        return;
+      } else {
+        ip_header->ip_ttl -= 1;
+      }
       /* find best match interface */
       struct sr_rt *target_routing_table = perform_lpm_ip(sr, target_ip);
       if (target_routing_table) {
@@ -151,7 +171,7 @@ void sr_handlepacket(struct sr_instance* sr,
         struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, target_out_interface->ip);
         if (target_arpentry) {
           /* send frame to next hop */
-          /* need to re-construct ip header, ethernet header */
+          /* need to change ip header, ethernet header */
           free(target_arpentry);
         } else {
           /* TODO: Send ARP request */
