@@ -132,7 +132,7 @@ void sr_handlepacket(struct sr_instance* sr,
         }
       } else {
         /* For other types, return ICMP port unreachable*/
-        printf("other typr IP packet for me\n");
+        printf("other type IP packet for me\n");
         unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
         uint8_t *port_unreachable_packet = malloc(length);
         make_icmp_t3_header((sr_icmp_t3_hdr_t *) (port_unreachable_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 3, 3, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
@@ -156,8 +156,19 @@ void sr_handlepacket(struct sr_instance* sr,
         return;
       }
       /* decrease TTL */
-      if (ip_header->ip_ttl == 0) {
-        /* TTL = 0, discard the packet */
+      if (ip_header->ip_ttl <= 1) {
+        /* TTL <= 1, should send icmp time exceeded */
+        /* Send ICMP time exceeded back to source */
+        printf("ip packet timeout\n");
+        unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+        uint8_t *timeout_packet = malloc(length);
+        make_icmp_t3_header((sr_icmp_hdr_t *) (timeout_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 11, 0, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
+        struct sr_if *out_interface = sr_get_interface(sr, interface);
+        make_ip_header((sr_ip_hdr_t *) (timeout_packet + sizeof(sr_ethernet_hdr_t)), sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, ntohl(out_interface->ip), source_ip);
+        make_ethernet_header((sr_ethernet_hdr_t *) timeout_packet, ethernet_source, ethernet_destination, ethertype_ip);
+        sr_send_packet(sr, timeout_packet, length, interface);
+        print_hdrs(timeout_packet, length);
+        free(timeout_packet);
         return;
       } else {
         ip_header->ip_ttl -= 1;
@@ -193,7 +204,8 @@ void sr_handlepacket(struct sr_instance* sr,
           sr_send_packet(sr, packet, len, target_out_interface->name);
           free(target_arpentry);
         } else {
-          /* TODO: Send ARP request */
+          /* next hop MAC can't be found in ARP cache */
+          /* Send ARP request */
           printf("target arp entry not found\n");
           unsigned char empty_mac[ETHER_ADDR_LEN] = {0};
           make_ethernet_header(ethernet_header, empty_mac, target_out_interface->addr, ethertype_ip);
@@ -238,7 +250,7 @@ void sr_handlepacket(struct sr_instance* sr,
       }
       sr_arp_hdr_t *arp_reply_header = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
       /* printf("interface ip: %x\n", incoming_interface->ip); */
-      make_arp_header(arp_reply_header, arp_op_reply, incoming_interface->addr, ntohl(incoming_interface->ip), sender_mac, sender_ip);
+      make_arp_header(arp_reply_header, arp_op_reply, incoming_interface->addr, ntohl(incoming_interface->ip), sender_mac, ntohl(sender_ip));
       make_ethernet_header((sr_ethernet_hdr_t *) packet, ethernet_source, incoming_interface->addr, ethertype_arp);
       print_hdr_arp((uint8_t *) arp_reply_header);
       sr_send_packet(sr, packet, length, interface);
@@ -303,6 +315,8 @@ void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t
   header->ip_hl = 5;
   header->ip_tos = 0;
   header->ip_len = htons(sizeof(sr_ip_hdr_t) + data_len);
+  header->ip_id = htons(0);
+  header->ip_off = htons(IP_DF);
   header->ip_ttl = ttl;
   header->ip_p = protocol;
   header->ip_src = htonl(src);
