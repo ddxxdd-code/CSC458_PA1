@@ -315,7 +315,7 @@ void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t
   header->ip_hl = 5;
   header->ip_tos = 0;
   header->ip_len = htons(sizeof(sr_ip_hdr_t) + data_len);
-  header->ip_id = htons(0);
+  header->ip_id = htons(1211);
   header->ip_off = htons(IP_DF);
   header->ip_ttl = ttl;
   header->ip_p = protocol;
