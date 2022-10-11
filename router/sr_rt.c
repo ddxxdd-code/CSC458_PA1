@@ -202,13 +202,20 @@ struct sr_rt *perform_lpm_ip(struct sr_instance *sr, uint32_t target_ip) {
     struct sr_rt *best_match = NULL;
     int max_fit = 0;
     int current_fit = 0;
+    int count_max_fit = 0;
     while (curr) {
         current_fit = matched_bits(ntohl(curr->dest.s_addr), target_ip, ntohl(curr->mask.s_addr));
         if (current_fit > max_fit) {
+            count_max_fit = 0;
             max_fit = current_fit;
             best_match = curr;
+        } else if (current_fit == max_fit) {
+            count_max_fit++;
         }
         curr = curr->next;
+    }
+    if (count_max_fit != 1) {
+        return NULL;
     }
     return best_match;
  } /* -- perform_lpm_ip -- */
