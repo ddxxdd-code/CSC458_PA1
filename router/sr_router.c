@@ -144,7 +144,6 @@ void sr_handlepacket(struct sr_instance* sr,
       }
     } else {
       /* This is not for me */
-      /* TODO: finish this case for forwarding */
       printf("ip packet not for me\n");
       /* sanity check the incoming packet */
       uint16_t check_sum = ip_header->ip_sum;
@@ -162,7 +161,7 @@ void sr_handlepacket(struct sr_instance* sr,
         printf("ip packet timeout\n");
         unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
         uint8_t *timeout_packet = malloc(length);
-        make_icmp_t3_header((sr_icmp_hdr_t *) (timeout_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 11, 0, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
+        make_icmp_t3_header((sr_icmp_t3_hdr_t *) (timeout_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 11, 0, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
         struct sr_if *out_interface = sr_get_interface(sr, interface);
         make_ip_header((sr_ip_hdr_t *) (timeout_packet + sizeof(sr_ethernet_hdr_t)), sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, ntohl(out_interface->ip), source_ip);
         make_ethernet_header((sr_ethernet_hdr_t *) timeout_packet, ethernet_source, ethernet_destination, ethertype_ip);
@@ -232,9 +231,9 @@ void sr_handlepacket(struct sr_instance* sr,
     uint32_t sender_ip = (arp_header->ar_sip);
     uint32_t target_ip = (arp_header->ar_tip);
     printf("sender ip: ");
-    print_addr_ip_int(ntohl(arp_header->ar_sip));
+    print_addr_ip_int(ntohl(sender_ip));
     printf("target ip: ");
-    print_addr_ip_int(ntohl(arp_header->ar_tip));
+    print_addr_ip_int(ntohl(target_ip));
     printf("request: %x\n", request_type);
     if (request_type == (unsigned short) arp_op_request) {
       printf("request for me\n");
