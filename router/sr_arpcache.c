@@ -66,41 +66,38 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
                     uint32_t source_ip = ((sr_ip_hdr_t *) (curr_packet->buf + sizeof(sr_ethernet_hdr_t)))->ip_src;
                     printf("packet source ip:\n");
                     print_addr_ip_int(ntohl(source_ip));
-                    struct sr_if *out_interface = sr_get_interface_by_ip(sr, source_ip);
-                    if (out_interface) {
-                        /* look for target MAC */
-                        unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
-                        uint8_t *buffer = malloc(length);
-                        sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *) (buffer + length - sizeof(sr_icmp_t3_hdr_t));
-                        make_icmp_t3_header(icmp_header, 3, 1, curr_packet->buf, sizeof(sr_icmp_t3_hdr_t));
-                        sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (buffer + sizeof(sr_ethernet_hdr_t));
-                        /* perform lpm to find the next hop */
-                        struct sr_rt *out_route = perform_lpm_ip(sr, source_ip);
-                        if (out_route) {
-                            /* find out interface based on next hop */
-                            struct sr_if *out_interface = sr_get_interface(sr, out_route->interface);
-                            uint32_t next_hop_ip = out_route->gw.s_addr;
-                            make_ip_header(ip_header, sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, ntohl(out_interface->ip), ntohl(next_hop_ip));
-                            sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) buffer;
-                            uint8_t empty_mac[ETHER_ADDR_LEN] = {0};
-                            make_ethernet_header(ethernet_header, empty_mac, out_interface->addr, ethertype_ip);
-                            /* look up next hop MAC by ip*/
-                            struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, next_hop_ip);
-                            if (target_arpentry) {
-                                memcpy(ethernet_header->ether_dhost, target_arpentry->mac, ETHER_ADDR_LEN);
-                                sr_send_packet(sr, buffer, length, out_interface->name);
-                                print_hdrs(buffer, length);
-                            } else {
-                                printf("no arp cache found for the ip, cache out packet to arpcache");
-                                struct sr_arpreq *waiting_arpreq = sr_arpcache_queuereq(&sr->cache, next_hop_ip, buffer, length, out_interface->name);
-                                handle_arpreq(sr, waiting_arpreq);
-                            }
+                    /* look for target MAC */
+                    unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+                    uint8_t *buffer = malloc(length);
+                    sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *) (buffer + length - sizeof(sr_icmp_t3_hdr_t));
+                    make_icmp_t3_header(icmp_header, 3, 1, curr_packet->buf, sizeof(sr_icmp_t3_hdr_t));
+                    sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *) (buffer + sizeof(sr_ethernet_hdr_t));
+                    /* perform lpm to find the next hop */
+                    struct sr_rt *out_route = perform_lpm_ip(sr, source_ip);
+                    if (out_route) {
+                        /* find out interface based on next hop */
+                        struct sr_if *out_interface = sr_get_interface(sr, out_route->interface);
+                        uint32_t next_hop_ip = out_route->gw.s_addr;
+                        make_ip_header(ip_header, sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, ntohl(out_interface->ip), ntohl(next_hop_ip));
+                        sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *) buffer;
+                        uint8_t empty_mac[ETHER_ADDR_LEN] = {0};
+                        make_ethernet_header(ethernet_header, empty_mac, out_interface->addr, ethertype_ip);
+                        /* look up next hop MAC by ip*/
+                        struct sr_arpentry *target_arpentry = sr_arpcache_lookup(&sr->cache, next_hop_ip);
+                        if (target_arpentry) {
+                            memcpy(ethernet_header->ether_dhost, target_arpentry->mac, ETHER_ADDR_LEN);
+                            sr_send_packet(sr, buffer, length, out_interface->name);
+                            print_hdrs(buffer, length);
                         } else {
-                            printf("no out route found for the ip address, routing table needs to be checked\n");
-                            print_addr_ip_int(ntohl(source_ip));
+                            printf("no arp cache found for the ip, cache out packet to arpcache");
+                            struct sr_arpreq *waiting_arpreq = sr_arpcache_queuereq(&sr->cache, next_hop_ip, buffer, length, out_interface->name);
+                            handle_arpreq(sr, waiting_arpreq);
                         }
-                        free(buffer);
+                    } else {
+                        printf("no out route found for the ip address, routing table needs to be checked\n");
+                        print_addr_ip_int(ntohl(source_ip));
                     }
+                    free(buffer);
                 } else {
                     printf("Not an ip packet waiting for ARPreq, can't determine the source and send error message back\n");
                 }
