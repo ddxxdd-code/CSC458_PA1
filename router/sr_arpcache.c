@@ -43,7 +43,7 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
     printf("handle arpreq\n");
     /* Loop each arp request entry */
     printf("ip: %X\n", request->ip);
-    if (time(NULL) - request->sent > 1.0) {
+    if (time(NULL) - request->sent >= 1.0) {
         printf("time out\n");
         if (request->times_sent >= 5) {
             printf("repeated to send 5 times, icmp host unreachable\n");
