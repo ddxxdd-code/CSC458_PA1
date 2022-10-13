@@ -303,6 +303,7 @@ void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, u
   assert(header);
   header->icmp_type = type;
   header->icmp_code = code;
+  header->next_mtu = htons(1500);
   header->icmp_sum = 0;
   memcpy(header->data, data, ICMP_DATA_SIZE);
   header->icmp_sum = cksum(header, len);
