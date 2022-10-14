@@ -215,6 +215,11 @@ struct sr_rt *perform_lpm_ip(struct sr_instance *sr, uint32_t target_ip) {
         curr = curr->next;
     }
     if (count_max_fit != 1) {
+        /* double match, invalid */
+        return NULL;
+    }
+    if (max_fit != 32) {
+        /* not matched exactly, return no match */
         return NULL;
     }
     return best_match;
