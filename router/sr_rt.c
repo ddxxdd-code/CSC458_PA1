@@ -202,25 +202,39 @@ struct sr_rt *perform_lpm_ip(struct sr_instance *sr, uint32_t target_ip) {
     struct sr_rt *best_match = NULL;
     int max_fit = 0;
     int current_fit = 0;
-    int count_max_fit = 0;
     while (curr) {
         current_fit = matched_bits(ntohl(curr->dest.s_addr), target_ip, ntohl(curr->mask.s_addr));
         if (current_fit > max_fit) {
-            count_max_fit = 0;
             max_fit = current_fit;
             best_match = curr;
-        } else if (current_fit == max_fit) {
-            count_max_fit++;
         }
         curr = curr->next;
     }
-    if (count_max_fit != 1) {
-        /* double match, invalid */
-        return NULL;
-    }
-    if (max_fit != 32) {
-        /* not matched exactly, return no match */
-        return NULL;
-    }
     return best_match;
  } /* -- perform_lpm_ip -- */
+/*---------------------------------------------------------------------
+ * Method: lpm_ip
+ *
+ * Perform lpm matching to find the best match routing table entry
+ * which gives the next hop ip and interface name, 
+ * which can then be used to construct headers
+ * Notice: here target_ip in network order
+ *---------------------------------------------------------------------*/
+struct sr_rt *lpm_ip(struct sr_instance *sr, uint32_t target_ip) {
+    struct sr_rt *curr = sr->routing_table;
+    struct sr_rt *best_match = NULL;
+    uint32_t longest_mask = 0;
+    while (curr) {
+        uint32_t masked_target_ip = target_ip & curr->mask.s_addr;
+        if (masked_target_ip == curr->dest.s_addr) {
+            /* prefix match happened*/
+            /* save the one with larger mask*/
+            if (ntohl(curr->mask.s_addr) > longest_mask) {
+                longest_mask = ntohl(curr->mask.s_addr);
+                best_match = curr;
+            }
+        }
+        curr = curr->next;
+    }
+    return best_match;
+ } /* -- lpm_ip -- */

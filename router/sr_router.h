@@ -64,6 +64,10 @@ void make_icmp_t3_header(sr_icmp_t3_hdr_t *header, uint8_t type, uint8_t code, u
 void make_ip_header(sr_ip_hdr_t *header, uint16_t data_len, uint8_t ttl, uint8_t protocol, uint32_t src, uint32_t dst);
 void make_arp_header(sr_arp_hdr_t *header, unsigned short op, unsigned char *sha, uint32_t sip, unsigned char *tha, uint32_t tip);
 void make_ethernet_header(sr_ethernet_hdr_t *header, uint8_t *dhost, uint8_t *shost, uint16_t type);
+void send_icmp(struct sr_instance *sr, uint8_t type, uint8_t code, uint32_t source_ip, uint32_t target_ip, uint8_t *payload, unsigned int len);
+void send_icmp_t3(struct sr_instance *sr, uint8_t type, uint8_t code, uint32_t source_ip, uint32_t target_ip, uint8_t *incoming_packet);
+void send_arp_reply(struct sr_instance *sr, char *interface, unsigned char *tha, uint32_t tip);
+void send_arp_request(struct sr_instance *sr, char *interface, uint32_t tip);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
