@@ -215,7 +215,19 @@ void sr_handlepacket(struct sr_instance* sr,
           }
         }
       } else {
-        /* TODO: no next found, icmp host not found reply */
+          /* no matching entry in the routing table when forwarding an IP packet, return ICMP net unreachable */
+          printf("a non-existent route to the destination IP\n");
+          unsigned int length = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+          uint8_t *net_unreachable_packet = malloc(length);
+          make_icmp_t3_header((sr_icmp_t3_hdr_t *) (net_unreachable_packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)), 3, 0, packet + sizeof(sr_ethernet_hdr_t), sizeof(sr_icmp_t3_hdr_t));
+          /* set src to current address and sent back to original source*/
+          struct sr_if *curr_interface = sr_get_interface(sr, interface);
+          make_ip_header((sr_ip_hdr_t *) (net_unreachable_packet + sizeof(sr_ethernet_hdr_t)), sizeof(sr_icmp_t3_hdr_t), INIT_TTL, ip_protocol_icmp, ntohl(curr_interface->ip), source_ip);
+          make_ethernet_header((sr_ethernet_hdr_t *) net_unreachable_packet, ethernet_source, ethernet_destination, ethertype_ip);
+          sr_send_packet(sr, net_unreachable_packet, length, interface);
+          print_hdrs(net_unreachable_packet, length);
+          free(net_unreachable_packet);
+      }
       }
     }
   } else if (ethernet_type == (uint16_t) ethertype_arp) {
