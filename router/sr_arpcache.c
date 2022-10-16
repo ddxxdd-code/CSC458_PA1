@@ -84,11 +84,11 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
             printf("target ip:\n");
             print_addr_ip_int(ntohl(request->ip));
             sr_print_if_list(sr);
-            /*
-             perform lpm to get out interface
+            
+            /* perform lpm to get out interface */
             struct sr_rt *out_route = lpm_ip(sr, request->ip);
             if (out_route) {
-                 we have an interface to broadcast
+                /* we have an interface to broadcast */
                 struct sr_if *out_interface = sr_get_interface(sr, out_route->interface);
                 if (!out_interface) {
                     printf("send arpreq: outward interface %s not found\n", out_route->interface);
@@ -99,15 +99,19 @@ void handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request) {
             } else {
                 printf("send arpreq: lpm ip for target failed\n");
             }
-            */
             
-            /* send request from all interface out and broadcast message */
+            
+            /* send request from all interface out and broadcast message
+             * this approach should work in reality, but rejected by MarkUs test
+             * when I test this case, it gives ICMP-Reply-Forwarding-1-r1 
+             * wrong interface error
             struct sr_if *out_interface = sr->if_list;
             while (out_interface != NULL) {
                 printf("out interface found, broadcast ARP request\n");
                 send_arp_request(sr, out_interface->name, request->ip);
                 out_interface = out_interface->next;
             }
+            */
             request->sent = time(NULL);
             request->times_sent++;
         }
